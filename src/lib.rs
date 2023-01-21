@@ -77,7 +77,7 @@ impl StockLending {
     // decrease the deposit pool by the number of shares deposited
     Env::deposit_pool::mutate(ticker, |v| *v -= shares);
     // transfer the shares to the deposit pool
-    <pallet_assets::Module<T>>::transfer(ticker, &depositor, &depositor, shares)?;
+    Env::transfer(ticker, &depositor, &depositor, shares)?;
     Ok(())
 }
 
@@ -87,12 +87,12 @@ impl StockLending {
     Env::deposit_pool::mutate(ticker, |v| *v -= shares);
     
 	// transfer the shares to the depositor
-    <pallet_assets::Module<T>>::transfer(ticker, &depositor, &depositor, shares)?;
+    Env::transfer(ticker, &depositor, &depositor, shares)?;
     Ok(())
   }
 
   
-  fn short_sell(sig: Signature, ticker: T::AssetId, shares: u32, collateral: u32) -> DispatchResult {
+  fn short_sell(sig: Signature, ticker: Symbol, shares: u64, collateral: u64) -> Symbol {
     // Ensure that the function is called by a signed account
     let invoker = env.invoker();
 
@@ -102,7 +102,7 @@ impl StockLending {
 
     // Check if there are enough shares in the deposit pool
     if available.is_none() || available < shares {
-      return Err(Error::<T>::InsufficientShares);
+      return Symbol<InsufficientShares>);
     }
 
     // Reduce the number of shares in the deposit pool
@@ -157,11 +157,11 @@ impl StockLending {
 	
 	// reduce the shares in the deposit pool by the amount borrowed and reserve the collateral from the borrower's account
     deposit_pool.mutate(ticker, |v| *v -= amount);
-    <pallet_balances::Module<T>>::reserve(&invoker, collateral)?;
+    Env::reserve(&invoker, collateral)?;
     let interest_rate = Self::get_interest_rate(ticker, amount);
     
 	// Store the loan details with interest rate and other required details 
-	let due_time = <timestamp::Module<T>>::get();
+	let due_time = timestamp::get();
     let borrowed_shares = BorrowedShares {
       borrower: invoker,
       ticker: ticker,
@@ -189,24 +189,25 @@ impl StockLending {
     // calculate the proportion of shares that are currently borrowed
     // relative to the total number of shares available
     let interest_rate = if supply > 0 {
+
     // let the interest rate scale logarithmically from 2.758 - 7.389 p.a.
-    std::f64::consts::E.pow((1 - (supply / (supply + demand)).log(2)))
+    2.7182818284590452353602874713527.pow((1 - (supply / (supply + demand)).log(2)))
     } else {
       u32::from(0)
     };
     interest_rate
   }
   
-  fn close_position(sig: Signature, ticker: T::AssetId) -> DispatchResult {
+  fn close_position(sig: Signature, ticker: T::AssetId) -> Symbol {
     let invoker = env.invoker();
     // check if the short seller is the borrower
     let short_sale = Env::short_sale(invoker);
     if short_sale.ticker != ticker {
-        return Err(Error::<T>::InvalidAssetId);
+        return Symbol<InvalidAssetId>;
     }
 	
     // check if the short sale is still open
-    if short_sale.shares == 0 {
+    if not short_sale.shares {
         return Err(Error::<T>::InvalidPosition);
     }
     
@@ -242,21 +243,23 @@ impl StockLending {
 	  // If 60% margin reached, liquidate the position by buying back the shares
 	  // and returning extra cash collateral to the short seller
 	  if liquidation_ratio < .4 {
-          Self::liquidate_position(short_seller, short_sale);
+        Self::liquidate_position(short_seller, short_sale);
       }
     });
   }
   
-  fn liquidate_position(short_seller: T::AccountId, short_sale: ShortSale<T::AccountId, u32>) {
+  fn liquidate_position(short_seller: AccountId, short_sale: ShortSale<AccountId) {
     // Place a market buy order on the Stellar decentralized exchange using the locked up short seller funds
     let buy_order = MarketBuyOrder::<T> {
       amount: short_sale.shares,
       invoker: short_seller,
     };
-    <pallet_exchange::Module<T>>::market_buy(short_sale.ticker, buy_order)?;
+
+    // submit a bid at MAX_PRICE and simutaneously roll over proceeds in atomic txn
+    Env::market_buy(short_sale.ticker, buy_order)?;
     
 	// Close the position by returning the collateral to the short seller
-    <pallet_balances::Module<T>>::repatriate_reserved(&short_seller, &short_seller, short_sale.collateral, BalanceStatus::Free)?;
+    Env::repatriate_reserved(&short_seller, &short_seller, short_sale.collateral, BalanceStatus::Free)?;
     
 	// Pay any short interest accrued to the depositor pool
     let interest = short_sale.collateral * short_sale.interest_rate;
@@ -274,14 +277,14 @@ impl StockLending {
 	// Check if the short sale is still open
 	let short_sale = Env::short_sale(short_seller);
     if short_sale.ticker != ticker {
-      return Err(Error::<T>::InvalidAssetId);
+      return Symbol<InvalidAssetId>);
     }
     if short_sale.shares == 0 {
-      return Err(Error::<T>::InvalidPosition);
+      return Symbol<NoShares>;
     }
     
 	// Reserve the additional cash collateral from the short seller
-	<pallet_balances::Module<T>>::reserve(&short_seller, collateral)?;
+	<reserve(&short_seller, collateral)?;
     Env::short_sale::mutate(short_seller, |v| {
       v.collateral += collateral;
     });
