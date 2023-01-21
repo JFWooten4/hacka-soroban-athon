@@ -136,34 +136,35 @@ impl StockLending {
 
   }
   
-  // create a new mapping to store the borrowed shares
-  pub struct StockLendingModule<T: Trait> {
-    pub deposit_pool: map hasher(blake2_128_concat) T::AssetId => u32,
-    pub borrowed_shares: map hasher(blake2_128_concat) T::AccountId => BorrowedShares<T::AccountId, u32>,
-  }
-
-  
-  impl<T: Trait> Module<T> for StockLendingModule {
-    fn on_initialize(_n: T::BlockNumber) {
-      deposit_pool = map hasher(blake2_128_concat) T::AssetId => u32::default();
-    }
-    fn on_finalize(_n: T::BlockNumber) {
-      deposit_pool.clear();
-    }
-  }
   
   // check if there are sufficient shares available in the deposit pool
   fn borrow(sig: Signature, ticker: T::AssetId, amount: u32, collateral: u32) -> DispatchResult {
     let invoker = env.invoker();
     
+
+    // Get the total shares in the deposit pool
+    let key = DataKey::LendingPoolRecord(sharesDeposited)
+    let total = env.storage().get(&key).unwrap_or(Ok(0))
+
+    // Get the number of shares currently borrowed
+    let key = DataKey::LendingPoolRecord(sharesBorrowed)
+    let borrowed = env.storage().get(&key).unwrap_or(Ok(0))
+
+    // Calculate the avaliable supply of shares
+    let available = total - borrowed;
+
+    if avaliable < amount {
+      return Vec[Err(Error::<T>::InsufficientPoolShares), available];
+    }
+
+
+
 	// check if there are sufficient shares available in the deposit pool,
 	let deposit_pool = Self::deposit_pool();
     let available = deposit_pool.get(ticker);
 	
 	// check if the collateral is sufficient, the user must have enough balance to put up the collateral
-    if available.is_none() || available < amount {
-        return Err(Error::<T>::InsufficientShares);
-    }
+    if available.is_none() || available < amount 
 	
 	// reduce the shares in the deposit pool by the amount borrowed and reserve the collateral from the borrower's account
     deposit_pool.mutate(ticker, |v| *v -= amount);
@@ -184,27 +185,35 @@ impl StockLending {
   }
   
   
-  pub fn get_interest_rate(ticker: T::AssetId, amount: u32) -> u32 {
-    let deposit_pool = Self::deposit_pool();
-   
-    // get the available shares in the deposit pool
-    let available = deposit_pool.get(ticker); 
+  pub fn GetInterestRate(env: Env, totalShares: i128, sharesBorrowed: i128) -> i128 {
+    
+    
+    // Calculate the interest rate logarithmically:
+    //    % Loaned       % Rate
+    //    .05            2.72
+    //    .25            2.73
+    //    .50            2.74
+    //    1.0            2.76
+    //    2.5            2.82
+    //    5.0            2.93
+    //    7.5            3.04 
+    //    10             3.16
+    //    15             3.44
+    //    25             4.12
+    //    35             5.06
+    //    45             6.44
+    //    55             8.60
+    //    65             12.36       <-- Big incentive to deposit
+    //    75             20.09
+    //    85             41.97
+    //    95             204.78
+    //    99             2087.78
+    let e = 2.7182818284590452353602874713527
+    let interestRate = e.pow((1 - (avaliable / total).log(2)))
+    
+    // Perhaps, in the future, this could be done with some kind 
+    // of bidding mechanism, if investors want more involvement.
 
-    // get the number of shares currently borrowed
-    let demand = Self::borrowed(ticker); 
-
-    // calculate the total supply of shares
-    let supply = available + demand;
-
-    // calculate the proportion of shares that are currently borrowed
-    // relative to the total number of shares available
-    let interest_rate = if supply > 0 {
-
-    // let the interest rate scale logarithmically from 2.758 - 7.389 p.a.
-    2.7182818284590452353602874713527.pow((1 - (supply / (supply + demand)).log(2)))
-    } else {
-      u32::from(0)
-    };
     interest_rate
   }
   
