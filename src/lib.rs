@@ -109,7 +109,7 @@ impl StockLending {
     deposit_pool.mutate(ticker, |v| *v -= shares);
 
     // Reserve the cash collateral from the short seller
-    <pallet_balances::Module<T>>::reserve(&invoker, collateral)?;
+    Env::reserve(&invoker, collateral)?;
 
     // Calculate the interest rate
     let interest_rate = Self::get_interest_rate(ticker, shares);
@@ -123,7 +123,11 @@ impl StockLending {
         collateral: collateral,
         proceeds: collateral,
     };
-    Env::
+    
+    // sell the stock on the SDEX at market (seperate function for limit orders?)
+
+    // allocate the proceeds to the invoker's collateral account map
+
   }
   
   // create a new mapping to store the borrowed shares
