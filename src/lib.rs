@@ -120,50 +120,39 @@ impl StockLending {
       return Vec[Symbol<InsufficientPoolShares>, available];
     }
 
-    let price = getPriceFromSDEX(ticker);
-
+    let price = getPriceFromSDEX(ticker); // how to do this
+    let value = shares * price
     // Check if sufficient collateral
-    if collateral >= shares * price {
-      return Vec[Symbol<InsufficientPoolShares>, available];
+    if collateral >= value {
+      return Vec[Symbol<InsufficientCollateral>, value];
     }
 
+    // Calculate the interest rate
+    let interestRate = Self::GetInterestRate(total, borrowed);
 
-    // Reduce the number of shares in the deposit pool
-    borrowed += shares;
-    
     // Reserve the cash collateral from the short seller
     Env::reserve(&invoker, collateral)?;
     
-    // Calculate the interest rate
-    let interest_rate = Self::get_interest_rate(ticker, shares);
+    // Reduce the number of shares avaliable in the deposit pool
+    borrowed += shares;
+  
     
     // sell the stock on the SDEX at market (seperate function for limit orders?)
     
     // allocate the proceeds to the invoker's collateral account map
 
+    let successOrderSubmissionLedger = 100
 
-
-    let mut sale = ShortSaleRecord
+    let mut sale = ShortSaleRecord(
+      shortSeller: &invoker,
+      sharesBorrowed: shares,
+      interestRate: interestRate,
+      borrowLedgerNum: successOrderSubmissionLedger,
+      postedCollateralBTD: collateral,
+      liqidationProceedsBTD: 0,
+    )
 	
-	// check if the collateral is sufficient, the user must have enough balance to put up the collateral
-    if available.is_none() || available < amount 
-	
-	// reduce the shares in the deposit pool by the amount borrowed and reserve the collateral from the borrower's account
-    deposit_pool.mutate(ticker, |v| *v -= amount);
-    Env::reserve(&invoker, collateral)?;
-    let interest_rate = Self::get_interest_rate(ticker, amount);
-    
-	// Store the loan details with interest rate and other required details 
-	let due_time = timestamp::get();
-    let borrowed_shares = BorrowedShares {
-      borrower: invoker,
-      ticker: ticker,
-      amount: amount,
-      interest_rate: interest_rate,
-      due_time: due_time,
-    };
-    Env::borrowed_shares::insert(&invoker, borrowed_shares);	  
-    Ok(())
+	  Symbol<"Sold {shares} for {consideration}">
   }
   
   
