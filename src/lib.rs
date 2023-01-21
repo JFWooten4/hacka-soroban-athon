@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contractimpl, contracttype, AccountId, Env, Symbol, Vec};
+use soroban_sdk::{contractimpl, contracttype, map, symbol, vec, AccountId, Env, Map, Symbol, Vec};
 
 pub struct StockLending;
 
@@ -30,7 +30,7 @@ pub struct ShortSaleRecord {
   // How many shares did they short sell
   pub sharesBorrowed: u128,
 
-  // Rate locked in upon trade execution, floating rates would be computationally hard
+  // Rate locked in upon trade execution (floating rates would be computationally hard)
   pub interestRate: i32,
   
   // Simple way to keep track of the time that's passed since a borrow for interest calculation
@@ -50,15 +50,15 @@ impl StockLending {
   
   
   pub fn DepositShares(env: Env, sig: Signature, ticker: Symbol, amount: u64) -> Vec<Symbol> {
-    assert(ticker == ticker)
+    assert_eq!(ticker == LendingPoolRecord.ticker)
     let invoker = env.invoker();
     let deposit_pool = Self::deposit_pool();
     PoolInfo.Deposits(invoker) = amount;
     Ok(())
   }
   
-  fn withdraw_shares(env: Env, sig: Signature, ticker: T::AssetId, shares: T::Shares) -> u32 {
-    let depositor = env.invoker();
+  pub fn WithdrawShares(env: Env, sig: Signature, ticker: T::AssetId, shares: T::Shares) -> u32 {
+    let invoker = env.invoker();
     
 	// check if the depositor has enough shares in the pool
     let deposit_pool = Env::deposit_pool(ticker);
@@ -98,47 +98,9 @@ impl StockLending {
   }
 
   
-  fn short_sell(sig: Signature, ticker: Symbol, shares: u64, collateral: u64) -> Symbol {
-    // Ensure that the function is called by a signed account
-    let invoker = env.invoker();
 
-    // Get the deposit pool of the given asset
-    let deposit_pool = Self::deposit_pool();
-    let available = deposit_pool.get(ticker);
-
-    // Check if there are enough shares in the deposit pool
-    if available.is_none() || available < shares {
-      return Symbol<InsufficientShares>);
-    }
-
-    // Reduce the number of shares in the deposit pool
-    deposit_pool.mutate(ticker, |v| *v -= shares);
-
-    // Reserve the cash collateral from the short seller
-    Env::reserve(&invoker, collateral)?;
-
-    // Calculate the interest rate
-    let interest_rate = Self::get_interest_rate(ticker, shares);
-
-    // Create a new struct for the short sale
-    let short_sale = ShortSale {
-        short_seller: invoker,
-        ticker: ticker,
-        shares: shares,
-        interest_rate: interest_rate,
-        collateral: collateral,
-        proceeds: collateral,
-    };
-    
-    // sell the stock on the SDEX at market (seperate function for limit orders?)
-
-    // allocate the proceeds to the invoker's collateral account map
-
-  }
   
-  
-  // check if there are sufficient shares available in the deposit pool
-  fn borrow(sig: Signature, ticker: T::AssetId, amount: u32, collateral: u32) -> DispatchResult {
+  pub fn ShortSell(sig: Signature, ticker: Symbol, shares: u64, collateral: u64) -> Symbol {
     let invoker = env.invoker();
     
 
@@ -148,20 +110,40 @@ impl StockLending {
 
     // Get the number of shares currently borrowed
     let key = DataKey::LendingPoolRecord(sharesBorrowed)
-    let borrowed = env.storage().get(&key).unwrap_or(Ok(0))
+    let mut borrowed = env.storage().get(&key).unwrap_or(Ok(0))
 
     // Calculate the avaliable supply of shares
     let available = total - borrowed;
-
+    
+    // Check if sufficient shares available
     if avaliable < amount {
-      return Vec[Err(Error::<T>::InsufficientPoolShares), available];
+      return Vec[Symbol<InsufficientPoolShares>, available];
+    }
+
+    let price = getPriceFromSDEX(ticker);
+
+    // Check if sufficient collateral
+    if collateral >= shares * price {
+      return Vec[Symbol<InsufficientPoolShares>, available];
     }
 
 
+    // Reduce the number of shares in the deposit pool
+    borrowed += shares;
+    
+    // Reserve the cash collateral from the short seller
+    Env::reserve(&invoker, collateral)?;
+    
+    // Calculate the interest rate
+    let interest_rate = Self::get_interest_rate(ticker, shares);
+    
+    // sell the stock on the SDEX at market (seperate function for limit orders?)
+    
+    // allocate the proceeds to the invoker's collateral account map
 
-	// check if there are sufficient shares available in the deposit pool,
-	let deposit_pool = Self::deposit_pool();
-    let available = deposit_pool.get(ticker);
+
+
+    let mut sale = ShortSaleRecord
 	
 	// check if the collateral is sufficient, the user must have enough balance to put up the collateral
     if available.is_none() || available < amount 
@@ -186,8 +168,6 @@ impl StockLending {
   
   
   pub fn GetInterestRate(env: Env, totalShares: i128, sharesBorrowed: i128) -> i128 {
-    
-    
     // Calculate the interest rate logarithmically:
     //    % Loaned       % Rate
     //    .05            2.72
@@ -213,6 +193,10 @@ impl StockLending {
     
     // Perhaps, in the future, this could be done with some kind 
     // of bidding mechanism, if investors want more involvement.
+
+    // Note that the interest rate here is floored. For instance,
+    // if 65% of shares are loaned out and you borrow the remaining
+    // 35% of shares, you will only pay the interest rate at 65% out.
 
     interest_rate
   }
