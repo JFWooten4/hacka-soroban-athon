@@ -1,66 +1,59 @@
 #![no_std]
-use soroban_sdk::{contractimpl, symbol, vec, Env, Symbol, Vec};
+use soroban_sdk::{contractimpl, contracttype, AccountId, Env, Symbol, Vec};
 
 pub struct StockLending;
 
 #[contracttype]
-pub struct PoolInfo {
+pub struct LendingPoolRecord {
   // Map depositor addresses to their share balance in the pool
-  pub Deposits: Map,
+  pub depositors: Map,
 
-  // Map borrowers to their ShortSale events from the pool
-  pub Borrows: Map,
+  // Map borrower addresses to a vector of their short sales
+  pub borrowers: Map,
   
   // This pool will work for only one asset to simplify recordkeeping
-  pub Ticker: Symbol,
+  pub ticker: Symbol,
   
   // Record globally the total number of shares floating around in the pool
-  pub SharesDeposited: u128,
-  pub SharesLoanedOut: u128,
+  pub sharesDeposited: u128,
+  pub sharesLoanedOut: u128,
 
   // Upon closing short sales, allocate subsequent interest payments to the pool
-  pub RetainedEarnings: u32,
+  pub retainedEarnings: u32,
 }
 
 #[contracttype]
-pub struct ShortSale {
+pub struct ShortSaleRecord {
   // This is just a sanity check, and could be removed to decrease execution cost
-  pub ShortSeller: AccountId,
+  pub shortSeller: AccountId,
 
   // How many shares did they short sell
-  pub SharesBorrowed: u128,
+  pub sharesBorrowed: u128,
 
   // Rate locked in upon trade execution, floating rates would be computationally hard
-  pub InterestRate: i32,
+  pub interestRate: i32,
   
-  // Simple way to keep track of the time that's passed since a borrow, for interest calculation
-  pub BorrowLedgerNum: u32,
+  // Simple way to keep track of the time that's passed since a borrow for interest calculation
+  pub borrowLedgerNum: u32,
 
   // Initial collateral paid by borrower should be the position's market value, to avoid pool losses.
   // This is fair since you'd need the same amount of money to take the opposite side of the trade. 
   // Excess returned at cover. Borrower can deposit more into a losing trade to avoid liquidation.
-  pub PostedCollateralBTD: u64,
+  pub postedCollateralBTD: u64,
 
   // TBD: if liquidated at -60%, it should help to keep this value global for fast calculations.
-  pub LiqidationProceedsBTD: u64,
+  pub liqidationProceedsBTD: u64,
 }
 
 #[contractimpl]
 impl StockLending {
   
-  pub deposit_pool: map hasher(blake2_128_concat) T::AssetId => u32
-  pub borrowed_shares: map hasher(blake2_128_concat) T::AccountId => BorrowedShares<T::AccountId, u32>
-  pub short_sale: map hasher(blake2_128_concat) T::AccountId => ShortSale<T::AccountId, u32>
-
-
-  pub struct StockLendingModule<env: Env, T: Trait> {
-    pub deposit_pool: map hasher(blake2_128_concat) T::AssetId => u32,
-  }
   
-  pub fn deposit_shares(env: Env, sig: Signature, ticker: Symbol, amount: u64) -> Vec<Symbol> {
+  pub fn DepositShares(env: Env, sig: Signature, ticker: Symbol, amount: u64) -> Vec<Symbol> {
+    assert(ticker == ticker)
     let invoker = env.invoker();
     let deposit_pool = Self::deposit_pool();
-    deposit_pool.insert(ticker, amount);
+    PoolInfo.Deposits(invoker) = amount;
     Ok(())
   }
   
