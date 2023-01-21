@@ -3,33 +3,46 @@ use soroban_sdk::{contractimpl, symbol, vec, Env, Symbol, Vec};
 
 pub struct StockLending;
 
+#[contracttype]
 pub struct PoolInfo {
-  pub deposits: Map,
-  pub borrows: Map,
-  pub ticker: AssetId,
-  pub amount: Balance,
-  pub interest_rate: Balance,
-  pub due_time: Moment,
+  // Map depositor addresses to their share balance in the pool
+  pub Deposits: Map,
+
+  // Map borrowers to their ShortSale events from the pool
+  pub Borrows: Map,
+  
+  // This pool will work for only one asset to simplify recordkeeping
+  pub Ticker: Symbol,
+  
+  // Record globally the total number of shares floating around in the pool
+  pub SharesDeposited: u128,
+  pub SharesLoanedOut: u128,
+
+  // Upon closing short sales, allocate subsequent interest payments to the pool
+  pub RetainedEarnings: u32,
 }
 
+#[contracttype]
 pub struct ShortSale {
-  pub short_seller: AccountId,
-  pub ticker: AssetId,
-  pub shares: Balance,
-  pub interest_rate: Balance,
-  pub collateral: Balance,
-  pub proceeds: Balance,
-}
+  // This is just a sanity check, and could be removed to decrease execution cost
+  pub ShortSeller: AccountId,
 
-pub struct Deposit<AccountId, Shares> {
-  // The account id of the depositor who owns the shares.
-  pub owner: AccountId,
+  // How many shares did they short sell
+  pub SharesBorrowed: u128,
+
+  // Rate locked in upon trade execution, floating rates would be computationally hard
+  pub InterestRate: i32,
   
-  // The total number of shares that are deposited in the pool.
-  pub shares: Shares,
-  
-  // The number of shares that are currently available to be borrowed
-  pub available_shares: Shares,
+  // Simple way to keep track of the time that's passed since a borrow, for interest calculation
+  pub BorrowLedgerNum: u32,
+
+  // Initial collateral paid by borrower should be the position's market value, to avoid pool losses.
+  // This is fair since you'd need the same amount of money to take the opposite side of the trade. 
+  // Excess returned at cover. Borrower can deposit more into a losing trade to avoid liquidation.
+  pub PostedCollateralBTD: u64,
+
+  // TBD: if liquidated at -60%, it should help to keep this value global for fast calculations.
+  pub LiqidationProceedsBTD: u64,
 }
 
 #[contractimpl]
